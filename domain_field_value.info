@@ -1,0 +1,5 @@
+name = Domain Field Value
+description = Domain Access control over individual field values.
+core = 7.x
+package = Domain Access
+dependencies[] = domain

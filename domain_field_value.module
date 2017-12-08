@@ -1,0 +1,88 @@
+<?php
+
+/**
+ * Implements hook_form_alter().
+ */
+function domain_field_value_form_field_ui_field_edit_form_alter(&$form, $form_state) {
+  $instance = $form['#instance'];
+  $field = $form['#field'];
+
+  $field = $form['#field'];
+  if (empty($form['instance']['settings'])) {
+    $form['instance']['settings'] = array();
+  }
+  $form['instance']['settings'] += _domain_field_value_field_instance_settings_form($field, $instance);
+}
+
+/**
+ * Configuration form for editing insert settings for a field instance.
+ */
+function _domain_field_value_field_instance_settings_form($field, $instance) {
+  $form['domain_field_value'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('domain_field_value Settings'),
+    '#weight' => 15,
+    '#collapsible' => FALSE,
+    '#collapsed' => FALSE,
+  );
+
+  $form['domain_field_value']['enabled'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Enable domain_field_value'),
+    '#default_value' => $instance['settings']['domain_field_value']['enabled'],
+    '#description' => t('Adds an extra text area for domain_field_value on this field.'),
+    '#weight' => 15,
+  );
+
+  return $form;
+}
+
+function domain_field_value_field_widget_form_alter(&$element, &$form_state, $context) {
+  // Add display_field setting to field because file_field_widget_form() assumes it is set.
+  $instance = $context['instance'];
+  $settings = $instance['settings'];
+  $field = $context['field'];
+  if (isset($settings['domain_field_value']['enabled']) && $settings['domain_field_value']['enabled']) {
+    foreach (element_children($element) as $delta) {
+      $element[$delta]['#process'][] = '_domain_field_value_widget_process';
+      //$element[$delta]['#settings']['image_field_caption_default'] = $settings['image_field_caption_wrapper']['image_field_caption_default'];
+    }
+  }
+}
+
+function _domain_field_value_widget_process($element, &$form_state, $form) {
+  $item = $element['#value'];
+
+  foreach (domain_domains() as $data) {
+    // The domain must be valid.
+    if ($data['valid'] || user_access('access inactive domains')) {
+      // Checkboxes must be filtered, select lists should not.
+      $options[$data['domain_id']] = empty($format) ? check_plain($data['sitename']) : $data['sitename'];
+    }
+  }
+
+  $element['domain_field_value'] = array(
+    '#title' => t('domain_field_value'),
+    '#type' => 'select',
+    '#multiple' => TRUE,
+    '#options' => $options,
+    '#default_value' => isset($item['domain_field_value']['value']) ? $item['domain_field_value']['value'] : $element['#settings']['domain_field_value_default']['value'],
+  );
+  return $element;
+}
+
+function domain_field_value_field_info_alter(&$info) {
+  // Add a setting to all field types.
+  foreach ($info as $field_type => $field_type_info) {
+    $info[$field_type]['instance_settings'] += array(
+      'domain_field_value' => array(
+        'enabled' => 0,
+      ),
+      'domain_field_value_wrapper' => array(
+        'domain_field_value_default' => array(
+          'value' => '',
+        ),
+      ),
+    );
+  }
+}
