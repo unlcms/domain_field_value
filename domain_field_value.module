@@ -7,20 +7,19 @@ function domain_field_value_form_field_ui_field_edit_form_alter(&$form, $form_st
   $instance = $form['#instance'];
   $field = $form['#field'];
 
-  $field = $form['#field'];
   if (empty($form['instance']['settings'])) {
     $form['instance']['settings'] = array();
   }
-  $form['instance']['settings'] += _domain_field_value_field_instance_settings_form($field, $instance);
+  $form['instance']['settings'] += domain_field_value_field_instance_settings_form($field, $instance);
 }
 
 /**
  * Configuration form for editing insert settings for a field instance.
  */
-function _domain_field_value_field_instance_settings_form($field, $instance) {
+function domain_field_value_field_instance_settings_form($field, $instance) {
   $form['domain_field_value'] = array(
     '#type' => 'fieldset',
-    '#title' => t('domain_field_value Settings'),
+    '#title' => t('Domain Access Field Value Settings'),
     '#weight' => 15,
     '#collapsible' => FALSE,
     '#collapsed' => FALSE,
@@ -28,12 +27,32 @@ function _domain_field_value_field_instance_settings_form($field, $instance) {
 
   $form['domain_field_value']['enabled'] = array(
     '#type' => 'checkbox',
-    '#title' => t('Enable domain_field_value'),
+    '#title' => t('Enable Domain Access Field Value'),
     '#default_value' => $instance['settings']['domain_field_value']['enabled'],
-    '#description' => t('Adds an extra text area for domain_field_value on this field.'),
+    '#description' => t('Adds the option to limit field values to selected domains.'),
     '#weight' => 15,
   );
 
+  foreach (domain_domains() as $data) {
+    // The domain must be valid.
+    if ($data['valid'] || user_access('access inactive domains')) {
+      // Checkboxes must be filtered, select lists should not.
+      $options[$data['domain_id']] = empty($format) ? check_plain($data['sitename']) : $data['sitename'];
+    }
+  }
+  $form['domain_field_value']['domain_field_value_default'] = array(
+    '#title' => t('Default domain(s)'),
+    '#description' => t('The default domains that this field will be restricted to. '),
+    '#type' => 'checkboxes',
+    '#options' => $options,
+    '#default_value' => $instance['settings']['domain_field_value']['domain_field_value_default'],
+    '#weight' => 15.1,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="instance[settings][domain_field_value][enabled]"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
   return $form;
 }
 
@@ -41,11 +60,10 @@ function domain_field_value_field_widget_form_alter(&$element, &$form_state, $co
   // Add display_field setting to field because file_field_widget_form() assumes it is set.
   $instance = $context['instance'];
   $settings = $instance['settings'];
-  $field = $context['field'];
   if (isset($settings['domain_field_value']['enabled']) && $settings['domain_field_value']['enabled']) {
     foreach (element_children($element) as $delta) {
       $element[$delta]['#process'][] = '_domain_field_value_widget_process';
-      //$element[$delta]['#settings']['image_field_caption_default'] = $settings['image_field_caption_wrapper']['image_field_caption_default'];
+      $element[$delta]['#settings']['domain_field_value_default'] = $settings['domain_field_value']['domain_field_value_default'];
     }
   }
 }
@@ -62,11 +80,10 @@ function _domain_field_value_widget_process($element, &$form_state, $form) {
   }
 
   $element['domain_field_value'] = array(
-    '#title' => t('domain_field_value'),
-    '#type' => 'select',
-    '#multiple' => TRUE,
+    '#title' => t('Restrict to these domains:'),
+    '#type' => 'checkboxes',
     '#options' => $options,
-    '#default_value' => isset($item['domain_field_value']['value']) ? $item['domain_field_value']['value'] : $element['#settings']['domain_field_value_default']['value'],
+    '#default_value' => isset($item['domain_field_value']['domain_field_value_default']) ? $item['domain_field_value']['domain_field_value_default'] : $element['#settings']['domain_field_value_default'],
   );
   return $element;
 }
@@ -77,10 +94,8 @@ function domain_field_value_field_info_alter(&$info) {
     $info[$field_type]['instance_settings'] += array(
       'domain_field_value' => array(
         'enabled' => 0,
-      ),
-      'domain_field_value_wrapper' => array(
         'domain_field_value_default' => array(
-          'value' => '',
+          'value' => array(),
         ),
       ),
     );
