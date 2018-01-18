@@ -1,6 +1,5 @@
 <?php
 
-
 /**
  * Implements hook_theme_registry_alter().
  */
@@ -13,7 +12,7 @@ function domain_field_value_theme_registry_alter(&$theme_registry) {
 /**
  * Duplicate of theme_form_element() with the addition of
  *   drupal_render_children($element, array('domain_field_value'))
- * at the end.
+ * at the end since widgets from the 'text' module don't render children.
  */
 function theme_domain_field_value_form_element($variables) {
   $element = &$variables['element'];
@@ -74,15 +73,13 @@ function theme_domain_field_value_form_element($variables) {
 
   $output .= "</div>\n";
 
+  // Start of this module's addition.
   if ($element['#type'] !== 'managed_file') {
     $output .= drupal_render_children($element, array('domain_field_value'));
   }
 
   return $output;
 }
-
-
-
 
 /**
  * Implements hook_form_alter().
@@ -144,7 +141,8 @@ function domain_field_value_field_widget_form_alter(&$element, &$form_state, $co
   // Add display_field setting to field because file_field_widget_form() assumes it is set.
   $instance = $context['instance'];
   $settings = $instance['settings'];
-  if (isset($settings['domain_field_value']['enabled']) && $settings['domain_field_value']['enabled']) {
+  if (isset($settings['domain_field_value']['enabled']) && $settings['domain_field_value']['enabled']
+    && $form_state['build_info']['form_id'] !== 'field_ui_field_edit_form') {
     foreach (element_children($element) as $delta) {
       if (isset($delta) && $delta === '_weight') {continue;}
       $element[$delta]['#process'][] = '_domain_field_value_widget_process';
@@ -153,6 +151,11 @@ function domain_field_value_field_widget_form_alter(&$element, &$form_state, $co
   }
 }
 
+/**
+ * An element #process callback for all field types.
+ *
+ * Expands all field types to include domain selection.
+ */
 function _domain_field_value_widget_process($element, &$form_state, $form) {
   $item = $element['#value'];
 
@@ -168,12 +171,15 @@ function _domain_field_value_widget_process($element, &$form_state, $form) {
     '#title' => t('Restrict to these domains:'),
     '#type' => 'checkboxes',
     '#options' => $options,
-    '#access' => true,
+    '#access' => isset($item['fid']) ? (bool) $item['fid'] : true,
     '#default_value' => isset($item['domain_field_value']['domain_field_value_default']) ? $item['domain_field_value']['domain_field_value_default'] : $element['#settings']['domain_field_value_default'],
   );
   return $element;
 }
 
+/**
+ * Implements hook_field_info_alter().
+ */
 function domain_field_value_field_info_alter(&$info) {
   // Add a setting to all field types.
   foreach ($info as $field_type => $field_type_info) {
