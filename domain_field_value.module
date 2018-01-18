@@ -1,5 +1,89 @@
 <?php
 
+
+/**
+ * Implements hook_theme_registry_alter().
+ */
+function domain_field_value_theme_registry_alter(&$theme_registry) {
+  if (isset($theme_registry['form_element'])) {
+    $theme_registry['form_element']['function'] = 'theme_domain_field_value_form_element';
+  }
+}
+
+/**
+ * Duplicate of theme_form_element() with the addition of
+ *   drupal_render_children($element, array('domain_field_value'))
+ * at the end.
+ */
+function theme_domain_field_value_form_element($variables) {
+  $element = &$variables['element'];
+
+  // This function is invoked as theme wrapper, but the rendered form element
+  // may not necessarily have been processed by form_builder().
+  $element += array(
+    '#title_display' => 'before',
+  );
+
+  // Add element #id for #type 'item'.
+  if (isset($element['#markup']) && !empty($element['#id'])) {
+    $attributes['id'] = $element['#id'];
+  }
+  // Add element's #type and #name as class to aid with JS/CSS selectors.
+  $attributes['class'] = array('form-item');
+  if (!empty($element['#type'])) {
+    $attributes['class'][] = 'form-type-' . strtr($element['#type'], '_', '-');
+  }
+  if (!empty($element['#name'])) {
+    $attributes['class'][] = 'form-item-' . strtr($element['#name'], array(' ' => '-', '_' => '-', '[' => '-', ']' => ''));
+  }
+  // Add a class for disabled elements to facilitate cross-browser styling.
+  if (!empty($element['#attributes']['disabled'])) {
+    $attributes['class'][] = 'form-disabled';
+  }
+  $output = '<div' . drupal_attributes($attributes) . '>' . "\n";
+
+  // If #title is not set, we don't display any label or required marker.
+  if (!isset($element['#title'])) {
+    $element['#title_display'] = 'none';
+  }
+  $prefix = isset($element['#field_prefix']) ? '<span class="field-prefix">' . $element['#field_prefix'] . '</span> ' : '';
+  $suffix = isset($element['#field_suffix']) ? ' <span class="field-suffix">' . $element['#field_suffix'] . '</span>' : '';
+
+  switch ($element['#title_display']) {
+    case 'before':
+    case 'invisible':
+      $output .= ' ' . theme('form_element_label', $variables);
+      $output .= ' ' . $prefix . $element['#children'] . $suffix . "\n";
+      break;
+
+    case 'after':
+      $output .= ' ' . $prefix . $element['#children'] . $suffix;
+      $output .= ' ' . theme('form_element_label', $variables) . "\n";
+      break;
+
+    case 'none':
+    case 'attribute':
+      // Output no label and no required marker, only the children.
+      $output .= ' ' . $prefix . $element['#children'] . $suffix . "\n";
+      break;
+  }
+
+  if (!empty($element['#description'])) {
+    $output .= '<div class="description">' . $element['#description'] . "</div>\n";
+  }
+
+  $output .= "</div>\n";
+
+  if ($element['#type'] !== 'managed_file') {
+    $output .= drupal_render_children($element, array('domain_field_value'));
+  }
+
+  return $output;
+}
+
+
+
+
 /**
  * Implements hook_form_alter().
  */
@@ -62,6 +146,7 @@ function domain_field_value_field_widget_form_alter(&$element, &$form_state, $co
   $settings = $instance['settings'];
   if (isset($settings['domain_field_value']['enabled']) && $settings['domain_field_value']['enabled']) {
     foreach (element_children($element) as $delta) {
+      if (isset($delta) && $delta === '_weight') {continue;}
       $element[$delta]['#process'][] = '_domain_field_value_widget_process';
       $element[$delta]['#settings']['domain_field_value_default'] = $settings['domain_field_value']['domain_field_value_default'];
     }
@@ -83,6 +168,7 @@ function _domain_field_value_widget_process($element, &$form_state, $form) {
     '#title' => t('Restrict to these domains:'),
     '#type' => 'checkboxes',
     '#options' => $options,
+    '#access' => true,
     '#default_value' => isset($item['domain_field_value']['domain_field_value_default']) ? $item['domain_field_value']['domain_field_value_default'] : $element['#settings']['domain_field_value_default'],
   );
   return $element;
@@ -94,10 +180,149 @@ function domain_field_value_field_info_alter(&$info) {
     $info[$field_type]['instance_settings'] += array(
       'domain_field_value' => array(
         'enabled' => 0,
-        'domain_field_value_default' => array(
-          'value' => array(),
-        ),
+        'domain_field_value_default' => array(),
       ),
     );
   }
 }
+
+
+
+
+
+
+/**
+ * Implements hook_field_attach_insert().
+ */
+function domain_field_value_field_attach_insert($entity_type, $entity) {
+  domain_field_value_field_attach_update($entity_type, $entity);
+}
+
+/**
+ * Implements hook_field_attach_update().
+ */
+function domain_field_value_field_attach_update($entity_type, $entity) {
+  list($id, $vid, $bundle) = entity_extract_ids($entity_type, $entity);
+
+  if (!isset($vid)) {
+    $vid = $id;
+  }
+
+  foreach (field_info_instances($entity_type, $bundle) as $field_name => $instance) {
+
+    // Skip the caption when it isn't present, or if it is disabled.
+    if (
+      !isset($instance['settings']['domain_field_value']) ||
+      !$instance['settings']['domain_field_value']['enabled']
+    ) { continue; }
+
+    $field = field_info_field($field_name);
+    $table_name = 'domain_field_value';
+    $revision_name = 'domain_field_value_revision';
+
+    $all_languages = field_available_languages($entity_type, $field);
+    if (!isset($entity->$field_name)) { continue; }
+    $field_languages = array_intersect($all_languages, array_keys((array) $entity->$field_name));
+
+    // Delete and insert, rather than update, in case a value was added.
+    // Delete languages present in the incoming $entity->$field_name.
+    // Delete all languages if $entity->$field_name is empty.
+    $languages = !empty($entity->$field_name) ? $field_languages : $all_languages;
+    if ($languages) {
+      db_delete($table_name)
+        ->condition('field_name', $field_name)
+        ->condition('entity_type', $entity_type)
+        ->condition('entity_id', $id)
+        ->condition('language', $languages, 'IN')
+        ->execute();
+      db_delete($revision_name)
+        ->condition('field_name', $field_name)
+        ->condition('entity_type', $entity_type)
+        ->condition('entity_id', $id)
+        ->condition('revision_id', $vid)
+        ->condition('language', $languages, 'IN')
+        ->execute();
+    }
+
+    // Prepare the multi-insert query.
+    $do_insert = FALSE;
+    $columns = array('field_name', 'entity_type', 'entity_id', 'revision_id', 'bundle', 'delta', 'language', 'caption', 'caption_format');
+    $query = db_insert($table_name)->fields($columns);
+    $revision_query = db_insert($revision_name)->fields($columns);
+
+    foreach ($field_languages as $langcode) {
+
+      $items = (array) $entity->{$field_name}[$langcode];
+      $delta_count = 0;
+      foreach ($items as $delta => $item) {
+        if (empty($item['image_field_caption']['value'])) { continue; }
+        // We now know we have someting to insert.
+        $do_insert = TRUE;
+        $record = array(
+          'field_name' => $field_name,
+          'entity_type' => $entity_type,
+          'entity_id' => $id,
+          'revision_id' => $vid,
+          'bundle' => $bundle,
+          'delta' => $delta,
+          'language' => $langcode,
+          'caption' => $item['image_field_caption']['value'],
+          'caption_format' => $item['image_field_caption']['format'],
+        );
+        $query->values($record);
+        if (isset($vid)) {
+          $revision_query->values($record);
+        }
+
+        if ($field['cardinality'] != FIELD_CARDINALITY_UNLIMITED && ++$delta_count == $field['cardinality']) {
+          break;
+        }
+      }
+    }
+
+    // Execute the query if we have values to insert.
+    if ($do_insert) {
+      $query->execute();
+      $revision_query->execute();
+    }
+  }
+}
+
+/**
+ * Implements hook_field_attach_load().
+ */
+//function domain_field_value_field_attach_load($entity_type, $entities, $age, $options) {
+//  foreach ($entities as $entity) {
+//    list($id, $vid, $bundle) = entity_extract_ids($entity_type, $entity);
+//    if (!isset($vid)) {
+//      $vid = $id;
+//    }
+//
+//    $load_current = $age == FIELD_LOAD_CURRENT;
+//
+//    $table = $load_current ? 'field_image_field_caption' : 'field_image_field_caption_revision';
+//
+//    $query = db_select($table, 't')
+//      ->fields('t')
+//      ->condition('entity_type', $entity_type)
+//      ->condition($load_current ? 'entity_id' : 'revision_id', $load_current ? $id : $vid)
+//      ->orderBy('delta');
+//
+//    $results = $query->execute();
+//
+//    foreach ($results as $row) {
+//      $field = field_info_instance($entity_type, $row->field_name, $bundle);
+//      if (
+//        !isset($field['settings']['image_field_caption']) ||
+//        !$field['settings']['image_field_caption']['enabled']
+//      ) { continue; }
+//
+//      $item['image_field_caption']['value'] = $row->caption;
+//      $item['image_field_caption']['format'] = $row->caption_format;
+//
+//      // Add the item to the field values for the entity.
+//      $entities[$row->entity_id]->{$row->field_name}[$row->language][$row->delta]['image_field_caption']['value'] = $row->caption;
+//      $entities[$row->entity_id]->{$row->field_name}[$row->language][$row->delta]['image_field_caption']['format'] = $row->caption_format;
+//    }
+//  }
+//}
