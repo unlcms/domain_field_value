@@ -163,6 +163,7 @@ function domain_field_value_field_widget_form_alter(&$element, &$form_state, $co
  */
 function domain_field_value_widget_process($element, &$form_state, $form) {
   if (isset($element['#value'])) {
+    // image & file
     $item = $element['#value'];
   }
   else {
@@ -264,7 +265,7 @@ function domain_field_value_field_attach_update($entity_type, $entity) {
       // We now know we have something to insert.
       $do_insert = TRUE;
       foreach ($item['domain_field_value'] as $domain_id) {
-        // Unset checkboxes are 0 & checked boxes are a string with the ID.
+        // Unset checkboxes are set to (int)0 & checked boxes are a string with the ID.
         if ($domain_id > 0) {
           $record = array(
             'field_name' => $field_name,
@@ -325,10 +326,31 @@ function domain_field_value_field_attach_load($entity_type, $entities, $age, $op
         !$field['settings']['domain_field_value']['enabled']
       ) { continue; }
 
-      $item['domain_field_value'][] = $row->gid;
-
       // Add the item to the field values for the entity.
       $entities[$row->entity_id]->{$row->field_name}[LANGUAGE_NONE][$row->delta]['domain_field_value'][] = $row->gid;
+    }
+  }
+}
+
+/**
+ * Implements MODULE_preprocess_HOOK().
+ */
+function domain_field_value_preprocess_field(&$variables) {
+  $domain = domain_get_domain();
+
+  $instance = field_info_instance($variables['element']['#entity_type'], $variables['element']['#field_name'], $variables['element']['#bundle']);
+
+  if (
+    !isset($instance['settings']['domain_field_value']) ||
+    !$instance['settings']['domain_field_value']['enabled']
+  ) { return; }
+
+  foreach ($variables['element']['#items'] as $key => $value) {
+    if (!in_array($domain['domain_id'], $value['domain_field_value'])) {
+      // Remove the field values that shouldn't be shown on the viewed domain.
+      unset($variables['items'][$key]);
+      unset($variables['element'][$key]);
+      unset($variables['element']['#items'][$key]);
     }
   }
 }
