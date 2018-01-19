@@ -125,7 +125,7 @@ function domain_field_value_schema() {
         'default' => '',
       ),
     ),
-    'primary key' => array('field_name', 'entity_type', 'entity_id', 'revision_id', 'delta'),
+    'primary key' => array('field_name', 'entity_type', 'entity_id', 'revision_id', 'delta', 'gid'),
     'indexes' => array(
       'entity_type' => array('entity_type'),
       'bundle' => array('bundle'),
