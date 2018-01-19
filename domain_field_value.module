@@ -202,90 +202,93 @@ function domain_field_value_field_info_alter(&$info) {
 
 
 
-///**
-// * Implements hook_field_attach_insert().
-// */
-//function domain_field_value_field_attach_insert($entity_type, $entity) {
-//  domain_field_value_field_attach_update($entity_type, $entity);
-//}
-//
-///**
-// * Implements hook_field_attach_update().
-// */
-//function domain_field_value_field_attach_update($entity_type, $entity) {
-//  list($id, $vid, $bundle) = entity_extract_ids($entity_type, $entity);
-//
-//  if (!isset($vid)) {
-//    $vid = $id;
-//  }
-//
-//  foreach (field_info_instances($entity_type, $bundle) as $field_name => $instance) {
-//
-//    // Skip the caption when it isn't present, or if it is disabled.
-//    if (
-//      !isset($instance['settings']['domain_field_value']) ||
-//      !$instance['settings']['domain_field_value']['enabled']
-//    ) { continue; }
-//
-//    $field = field_info_field($field_name);
-//    $table_name = 'domain_field_value';
-//    $revision_name = 'domain_field_value_revision';
-//
-//    if (!isset($entity->$field_name)) { continue; }
-//
-//    db_delete($table_name)
-//      ->condition('field_name', $field_name)
-//      ->condition('entity_type', $entity_type)
-//      ->condition('entity_id', $id)
-//      ->execute();
-//    db_delete($revision_name)
-//      ->condition('field_name', $field_name)
-//      ->condition('entity_type', $entity_type)
-//      ->condition('entity_id', $id)
-//      ->condition('revision_id', $vid)
-//      ->execute();
-//
-//    // Prepare the multi-insert query.
-//    $do_insert = FALSE;
-//    $columns = array('field_name', 'entity_type', 'entity_id', 'revision_id', 'bundle', 'delta', 'gid', 'realm');
-//    $query = db_insert($table_name)->fields($columns);
-//    $revision_query = db_insert($revision_name)->fields($columns);
-//
-//    $items = (array) $entity->{$field_name};
-//    $delta_count = 0;
-//    foreach ($items as $delta => $item) {
-//      if (empty($item['domain_field_value']['value'])) { continue; }
-//      // We now know we have something to insert.
-//      $do_insert = TRUE;
-//      foreach ($item['domain_field_value']['value'] as $domain_id) {
-//        $record = array(
-//          'field_name' => $field_name,
-//          'entity_type' => $entity_type,
-//          'entity_id' => $id,
-//          'revision_id' => $vid,
-//          'bundle' => $bundle,
-//          'delta' => $delta,
-//          'gid' => $domain_id,
-//          'realm' => 'domain_id',
-//        );
-//      }
-//      $query->values($record);
-//      if (isset($vid)) {
-//        $revision_query->values($record);
-//      }
-//
-//      if ($field['cardinality'] != FIELD_CARDINALITY_UNLIMITED && ++$delta_count == $field['cardinality']) {
-//        break;
-//      }
-//    }
-//
-//    // Execute the query if we have values to insert.
-//    if ($do_insert) {
-//      $query->execute();
-//      $revision_query->execute();
-//    }
-//  }
-//}
+/**
+ * Implements hook_field_attach_insert().
+ */
+function domain_field_value_field_attach_insert($entity_type, $entity) {
+  domain_field_value_field_attach_update($entity_type, $entity);
+}
+
+/**
+ * Implements hook_field_attach_update().
+ */
+function domain_field_value_field_attach_update($entity_type, $entity) {
+  list($id, $vid, $bundle) = entity_extract_ids($entity_type, $entity);
+
+  if (!isset($vid)) {
+    $vid = $id;
+  }
+
+  foreach (field_info_instances($entity_type, $bundle) as $field_name => $instance) {
+
+    // Skip the caption when it isn't present, or if it is disabled.
+    if (
+      !isset($instance['settings']['domain_field_value']) ||
+      !$instance['settings']['domain_field_value']['enabled']
+    ) { continue; }
+
+    $field = field_info_field($field_name);
+    $table_name = 'domain_field_value';
+    $revision_name = 'domain_field_value_revision';
+
+    if (!isset($entity->$field_name)) { continue; }
+
+    db_delete($table_name)
+      ->condition('field_name', $field_name)
+      ->condition('entity_type', $entity_type)
+      ->condition('entity_id', $id)
+      ->execute();
+    db_delete($revision_name)
+      ->condition('field_name', $field_name)
+      ->condition('entity_type', $entity_type)
+      ->condition('entity_id', $id)
+      ->condition('revision_id', $vid)
+      ->execute();
+
+    // Prepare the multi-insert query.
+    $do_insert = FALSE;
+    $columns = array('field_name', 'entity_type', 'entity_id', 'revision_id', 'bundle', 'delta', 'gid', 'realm');
+    $query = db_insert($table_name)->fields($columns);
+    $revision_query = db_insert($revision_name)->fields($columns);
+
+    $items = (array) $entity->{$field_name}[LANGUAGE_NONE];
+    $delta_count = 0;
+    foreach ($items as $delta => $item) {
+      if (empty($item['domain_field_value'])) { continue; }
+      // We now know we have something to insert.
+      $do_insert = TRUE;
+      foreach ($item['domain_field_value'] as $domain_id) {
+        // Unset checkboxes are 0 & checked boxes are a string with the ID.
+        if ($domain_id > 0) {
+          $record = array(
+            'field_name' => $field_name,
+            'entity_type' => $entity_type,
+            'entity_id' => $id,
+            'revision_id' => $vid,
+            'bundle' => $bundle,
+            'delta' => $delta,
+            'gid' => $domain_id,
+            'realm' => 'domain_id',
+          );
+          $query->values($record);
+          if (isset($vid)) {
+            $revision_query->values($record);
+          }
+        }
+      }
+
+      if ($field['cardinality'] != FIELD_CARDINALITY_UNLIMITED && ++$delta_count == $field['cardinality']) {
+        break;
+      }
+    }
+
+    // Execute the query if we have values to insert.
+    if ($do_insert) {
+      $query->execute();
+      $revision_query->execute();
+    }
+  }
+}
 
 /**
  * Implements hook_field_attach_load().
