@@ -366,3 +366,28 @@ function domain_field_value_preprocess_field(&$variables) {
     $variables['label_hidden'] = true;
   }
 }
+
+
+function domain_field_value_preprocess_node(&$variables) {
+  //unset($variables['content']['field_photo_caption']);
+  //unset($variables['content']['field_test_book_field_1']);
+  //echo '<pre>';var_dump($variables['content']['field_test_book_field_1']);exit;
+}
+
+function domain_field_value_views_post_execute(&$view) {
+  $domain = domain_get_domain();
+  foreach ($view->result as $key=>$result) {
+    foreach ($result as $fieldname => $field) {
+      foreach ($field as $delta => $fieldinfo) {
+        if (isset($fieldinfo['raw']['domain_field_value'])) {
+          if (!in_array($domain['domain_id'], $fieldinfo['raw']['domain_field_value'])) {
+            // Remove the field value that shouldn't be shown on the viewed domain.
+            unset($view->result[$key]->{$fieldname}[$delta]);
+            // Alternative way but the item is still counted as existing.
+            //$view->result[$key]->{$fieldname}[$delta]['rendered']['#access'] = false;
+          }
+        }
+      }
+    }
+  }
+}
