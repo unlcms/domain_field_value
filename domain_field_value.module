@@ -350,11 +350,8 @@ function domain_field_value_preprocess_field(&$variables) {
 
   foreach ($variables['element']['#items'] as $key => $value) {
     if (!in_array($domain['domain_id'], $value['domain_field_value'])) {
-      // Remove the field values that shouldn't be shown on the viewed domain.
-      unset($variables['items'][$key]);
-      unset($variables['element'][$key]);
-      unset($variables['element']['#items'][$key]);
-      //unset($variables['element']['#object']->{$variables['element']['#field_name']}[LANGUAGE_NONE][$key]);
+      // Remove the field value that shouldn't be shown on the viewed domain.
+      $variables['items'][$key]['#access'] = false;
     }
   }
 }
