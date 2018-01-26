@@ -354,4 +354,15 @@ function domain_field_value_preprocess_field(&$variables) {
       $variables['items'][$key]['#access'] = false;
     }
   }
+
+  // Make sure label is hidden if all values are hidden.
+  $preserve_label_setting = false;
+  foreach ($variables['items'] as $key => $value) {
+    if (!isset($variables['items'][$key]['#access']) || (isset($variables['items'][$key]['#access']) && $variables['items'][$key]['#access'])) {
+      $preserve_label_setting = true;
+    }
+  }
+  if (!$preserve_label_setting) {
+    $variables['label_hidden'] = true;
+  }
 }
