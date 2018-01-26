@@ -167,7 +167,10 @@ function domain_field_value_widget_process($element, &$form_state, $form) {
     $item = $element['#value'];
   }
   else {
-    $item = $element['#entity']->{$element['#field_name']}[LANGUAGE_NONE][$element['#delta']];
+    $item = isset($element['#entity']->{$element['#field_name']}[LANGUAGE_NONE][$element['#delta']]) ? $element['#entity']->{$element['#field_name']}[LANGUAGE_NONE][$element['#delta']] : array();
+
+    $instance = field_info_instance($element['target_id']['#entity_type'], $element['target_id']['#field_name'], $element['target_id']['#bundle']);
+
   }
 
   foreach (domain_domains() as $data) {
@@ -179,7 +182,7 @@ function domain_field_value_widget_process($element, &$form_state, $form) {
   }
 
   $element['domain_field_value'] = array(
-    '#title' => t('Restrict to these domains:'),
+    '#title' => t('Publish to'),
     '#type' => 'checkboxes',
     '#options' => $options,
     '#weight' => 20,
@@ -351,6 +354,7 @@ function domain_field_value_preprocess_field(&$variables) {
       unset($variables['items'][$key]);
       unset($variables['element'][$key]);
       unset($variables['element']['#items'][$key]);
+      //unset($variables['element']['#object']->{$variables['element']['#field_name']}[LANGUAGE_NONE][$key]);
     }
   }
 }
